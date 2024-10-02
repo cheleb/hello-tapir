@@ -1,27 +1,41 @@
 package dev.cheleb.hellotapir
 
-import sttp.tapir.server.netty.{NettyFutureServer, NettyFutureServerOptions}
+import sttp.tapir.ztapir.*
 
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.io.StdIn
 import ExecutionContext.Implicits.global
+import sttp.tapir.server.ziohttp.ZioHttpInterpreter
+import sttp.tapir.server.ziohttp.ZioHttpServerOptions
+import zio.http.Server
+import zio.http.HttpApp
+import zio.*
+import zio.logging.backend.SLF4J
+import zio.logging.LogFormat
 
-@main def run(): Unit =
+object Main extends ZIOAppDefault:
 
-  val serverOptions = NettyFutureServerOptions.customiseInterceptors
-    .metricsInterceptor(Endpoints.prometheusMetrics.metricsInterceptor())
-    .options
+  override val bootstrap: ZLayer[ZIOAppArgs, Any, Any] = SLF4J.slf4j(LogLevel.Debug, LogFormat.default)
 
-  val port = sys.env.get("HTTP_PORT").flatMap(_.toIntOption).getOrElse(8080)
-  val program =
-    for
-      binding <- NettyFutureServer(serverOptions).port(port).addEndpoints(Endpoints.all).start()
-      _ <- Future {
-        println(s"Go to http://localhost:${binding.port}/docs to open SwaggerUI. Press ENTER key to exit.")
-        StdIn.readLine()
-      }
-      stop <- binding.stop()
-    yield stop
+  override def run: ZIO[Any with ZIOAppArgs with Scope, Any, Any] =
 
-  Await.result(program, Duration.Inf)
+    val serverOptions = ZioHttpServerOptions.customiseInterceptors
+      .metricsInterceptor(Endpoints.prometheusMetrics.metricsInterceptor())
+      .defaultHandlers(myFailureResponse)
+      .options
+
+    val port = sys.env.get("HTTP_PORT").flatMap(_.toIntOption).getOrElse(8080)
+
+    val app: HttpApp[Any] = ZioHttpInterpreter(serverOptions).toHttp(Endpoints.all)
+
+    (for {
+      actualPort <- Server.install(app) // or .serve if you don't need the port and want to keep it running without manual readLine
+      _ <- zio.Console.printLine(s"Go to http://localhost:${actualPort}/docs to open SwaggerUI. Press ENTER key to exit.")
+      _ <- zio.Console.readLine
+    } yield ())
+      .provide(
+        ZLayer.succeed(Server.Config.default.port(port)),
+        Server.live
+      )
+      .exitCode

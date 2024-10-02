@@ -1,7 +1,7 @@
 package dev.cheleb.hellotapir
 
-import sttp.tapir.*
-
+import sttp.tapir.ztapir.*
+import sttp.tapir.PublicEndpoint
 import Library.*
 import scala.concurrent.Future
 import sttp.tapir.generic.auto.*
@@ -10,6 +10,8 @@ import sttp.tapir.server.ServerEndpoint
 import sttp.tapir.server.metrics.prometheus.PrometheusMetrics
 import sttp.tapir.swagger.bundle.SwaggerInterpreter
 import io.circe.Codec
+import zio.*
+import sttp.tapir.server.ziohttp.ZioHttpInterpreter
 
 object Endpoints:
   case class User(name: String) extends AnyVal
@@ -17,11 +19,21 @@ object Endpoints:
     .in("hello")
     .in(query[User]("name"))
     .out(stringBody)
-  val helloServerEndpoint: ServerEndpoint[Any, Future] = helloEndpoint.serverLogicSuccess(user => Future.successful(s"Hello ${user.name}"))
 
-  val graphvizEndpoint: PublicEndpoint[Graphviz, Unit, GraphvizOutput[_], Any] = endpoint.get
+  val helloServerEndpoint: ZServerEndpoint[Any, Any] = helloEndpoint.serverLogicSuccess(user => ZIO.succeed(s"Hello ${user.name}"))
+
+  val intEndpoint: PublicEndpoint[Int, Unit, String, Any] = endpoint.get
+    .in("int")
+    .in(query[Int]("value"))
+    .out(stringBody)
+
+  val intServerEndpoint: ZServerEndpoint[Any, Any] = intEndpoint
+    .serverLogicSuccess(value => ZIO.succeed(s"Value is $value"))
+
+  val graphvizEndpoint: PublicEndpoint[(Graphviz, String), Unit, GraphvizOutput[_], Any] = endpoint.get
     .in("graphviz")
     .in(header[Graphviz]("OutputFormat"))
+    .in(query[String]("zozo"))
     .out(
       oneOf[GraphvizOutput[_]](
         oneOfVariant(jsonBody[GraphvizOutput.SVG]),
@@ -30,27 +42,30 @@ object Endpoints:
       )
     )
 
-  val graphvizServerEndpoint: ServerEndpoint[Any, Future] =
-    graphvizEndpoint.serverLogicSuccess {
-      case Graphviz.SVG => Future.successful(GraphvizOutput.SVG("svg"))
-      case Graphviz.PNG => Future.successful(GraphvizOutput.PNG("png"))
-      case Graphviz.DOT => Future.successful(GraphvizOutput.DOT("dot"))
+  val graphvizServerEndpoint: ZServerEndpoint[Any, Any] =
+    graphvizEndpoint.serverLogicSuccess { case (ss, _) =>
+      ss match {
+        case Graphviz.SVG => ZIO.succeed(GraphvizOutput.SVG("svg"))
+        case Graphviz.PNG => ZIO.succeed(GraphvizOutput.PNG("png"))
+        case Graphviz.DOT => ZIO.succeed(GraphvizOutput.DOT("dot"))
+      }
     }
 
   val booksListing: PublicEndpoint[Unit, Unit, List[Book], Any] = endpoint.get
     .in("books" / "list" / "all")
     .out(jsonBody[List[Book]])
-  val booksListingServerEndpoint: ServerEndpoint[Any, Future] = booksListing.serverLogicSuccess(_ => Future.successful(Library.books))
+  val booksListingServerEndpoint: ZServerEndpoint[Any, Any] = booksListing.serverLogicSuccess(_ => ZIO.succeed(Library.books))
 
-  val apiEndpoints: List[ServerEndpoint[Any, Future]] = List(helloServerEndpoint, booksListingServerEndpoint, graphvizServerEndpoint)
+  val apiEndpoints: List[ZServerEndpoint[Any, Any]] =
+    List(helloServerEndpoint, intServerEndpoint, booksListingServerEndpoint, graphvizServerEndpoint)
 
-  val docEndpoints: List[ServerEndpoint[Any, Future]] = SwaggerInterpreter()
-    .fromServerEndpoints[Future](apiEndpoints, "yammering-mouse", "1.0.0")
+  val docEndpoints: List[ZServerEndpoint[Any, Any]] = SwaggerInterpreter()
+    .fromServerEndpoints[Task](apiEndpoints, "spiritual-marten", "1.0.0")
 
-  val prometheusMetrics: PrometheusMetrics[Future] = PrometheusMetrics.default[Future]()
-  val metricsEndpoint: ServerEndpoint[Any, Future] = prometheusMetrics.metricsEndpoint
+  val prometheusMetrics: PrometheusMetrics[Task] = PrometheusMetrics.default[Task]()
+  val metricsEndpoint: ZServerEndpoint[Any, Any] = prometheusMetrics.metricsEndpoint
 
-  val all: List[ServerEndpoint[Any, Future]] = apiEndpoints ++ docEndpoints ++ List(metricsEndpoint)
+  val all: List[ZServerEndpoint[Any, Any]] = apiEndpoints ++ docEndpoints ++ List(metricsEndpoint)
 
 object Library:
   case class Author(name: String) derives Codec.AsObject
