@@ -2,10 +2,6 @@ package dev.cheleb.hellotapir
 
 import sttp.tapir.ztapir.*
 
-import scala.concurrent.duration.Duration
-import scala.concurrent.{Await, ExecutionContext, Future}
-import scala.io.StdIn
-import ExecutionContext.Implicits.global
 import sttp.tapir.server.ziohttp.ZioHttpInterpreter
 import sttp.tapir.server.ziohttp.ZioHttpServerOptions
 import zio.http.Server
@@ -18,7 +14,7 @@ object Main extends ZIOAppDefault:
 
   override val bootstrap: ZLayer[ZIOAppArgs, Any, Any] = SLF4J.slf4j(LogLevel.Debug, LogFormat.default)
 
-  override def run: ZIO[Any with ZIOAppArgs with Scope, Any, Any] =
+  override def run: ZIO[ZIOAppArgs & Scope, Any, Any] =
 
     val serverOptions = ZioHttpServerOptions.customiseInterceptors
       .metricsInterceptor(Endpoints.prometheusMetrics.metricsInterceptor())

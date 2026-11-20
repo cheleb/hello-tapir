@@ -5,7 +5,6 @@ import sttp.tapir.Codec
 import sttp.tapir.CodecFormat.TextPlain
 import sttp.tapir.DecodeResult
 import cats.Show
-import cats.syntax.all.*
 
 import java.util.Locale
 import io.circe.Codec as CirceCodec

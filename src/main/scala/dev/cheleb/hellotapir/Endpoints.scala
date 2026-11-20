@@ -3,15 +3,12 @@ package dev.cheleb.hellotapir
 import sttp.tapir.ztapir.*
 import sttp.tapir.PublicEndpoint
 import Library.*
-import scala.concurrent.Future
 import sttp.tapir.generic.auto.*
 import sttp.tapir.json.circe.*
-import sttp.tapir.server.ServerEndpoint
 import sttp.tapir.server.metrics.prometheus.PrometheusMetrics
 import sttp.tapir.swagger.bundle.SwaggerInterpreter
 import io.circe.Codec
 import zio.*
-import sttp.tapir.server.ziohttp.ZioHttpInterpreter
 
 object Endpoints:
   case class User(name: String) extends AnyVal
@@ -30,12 +27,12 @@ object Endpoints:
   val intServerEndpoint: ZServerEndpoint[Any, Any] = intEndpoint
     .serverLogicSuccess(value => ZIO.succeed(s"Value is $value"))
 
-  val graphvizEndpoint: PublicEndpoint[(Graphviz, String), Unit, GraphvizOutput[_], Any] = endpoint.get
+  val graphvizEndpoint: PublicEndpoint[(Graphviz, String), Unit, GraphvizOutput[?], Any] = endpoint.get
     .in("graphviz")
     .in(header[Graphviz]("OutputFormat"))
     .in(query[String]("zozo"))
     .out(
-      oneOf[GraphvizOutput[_]](
+      oneOf[GraphvizOutput[?]](
         oneOfVariant(jsonBody[GraphvizOutput.SVG]),
         oneOfVariant(jsonBody[GraphvizOutput.PNG]),
         oneOfVariant(plainBody[GraphvizOutput.DOT])
